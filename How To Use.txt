@@ -1,0 +1,5 @@
+CSV file will automatically created
+
+You can change the data directly through CSV file (If you want to check the validate is going weell).
+
+Warning: If you choose option 1 (Create New Blcokchain), then the previous file will be replaced with new one.
