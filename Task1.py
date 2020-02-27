@@ -5,12 +5,13 @@ from pymongo import MongoClient
 import pandas as pd
 import random
 import os
+import time
 
 def sha3(data):
     return hashlib.sha3_256(data.encode('utf-8')).hexdigest()
 
-def hashValue(index, data, timestamp, prevHash, randomPadding):
-    allData = str(index) + str(data) + str(timestamp) + str(prevHash) + str(randomPadding)
+def hashValue(index, data, timestamp, prevHash, nonce):
+    allData = str(index) + str(data) + str(timestamp) + str(prevHash) + str(nonce)
     allData = sha3(allData)
     return allData
 
@@ -40,8 +41,8 @@ def read_file(filename):
 
 def create_blockchain():
     filename = "Blockchain.csv"
-    newData = pd.DataFrame(columns=['Index','Data','Time','Previous Hash','Random Padding','Hash'], index=None)
-    newData = newData.append({'Index':str(0), 'Data': 'Genesis', 'Time': str(datetime.now()), 'Previous Hash': "0", 'Random Padding': "0", 'Hash': "0"}, ignore_index=True)
+    newData = pd.DataFrame(columns=['Index','Data','Time','Previous Hash','Nonce','Hash'], index=None)
+    newData = newData.append({'Index':str(0), 'Data': 'Genesis', 'Time': str(datetime.now()), 'Previous Hash': "0", 'Nonce': "0", 'Hash': "0"}, ignore_index=True)
 
     newData.to_csv(filename, index=None)
 
@@ -49,40 +50,55 @@ def addBlockchain(newData):
     filename = "Blockchain.csv"
     param1 = np.uint64(random.random()*(2**64))
     param2 = np.uint64(random.random()*(2**64))
-    param3 = np.uint64(random.random()*(2**64))
+    param3 = np.uint64(6364136223846793005)
     data = read_file(filename)
     index = len(data)
     timestamp = str(datetime.now())
     prevHash = data['Hash'][index - 1]
     randomGen = pcg32(param1, param2, param3)
-    randomPadding = next(randomGen)
-    Hash = hashValue(index, newData, timestamp, prevHash, randomPadding)
-    data = data.append({"Index": str(index), "Data": newData, "Time": timestamp, "Previous Hash": prevHash, "Random Padding": str(randomPadding), "Hash": Hash}, ignore_index=True)
-    data.to_csv(filename, index=None)
+    i = 0
+    start = time.time()
+    nonce = next(randomGen)
+    Hash = hashValue(index, newData, timestamp, prevHash, nonce)
+    while True:
+        nonce = nonce - 1
+        Hash = hashValue(index, newData, timestamp, prevHash, nonce)
+        if Hash[0:6] == '00ff00':
+            data = data.append({"Index": str(index), "Data": newData, "Time": timestamp, "Previous Hash": prevHash, "Nonce": str(nonce), "Hash": Hash}, ignore_index=True)
+            data.to_csv(filename, index=None)
+            break
+        if i > 1000:
+            i = 0
+            nonce = next(randomGen)
+
+        i = i + 1
+    total_time = time.time() - start
+    print("Total Time in Mining: "+str(total_time) +' s')
 
 def viewBlock():
     filename = "Blockchain.csv"
-    data = pd.read_csv(filename, delimiter=',',names=['Index','Data','Time','Previous Hash','Random Padding','Hash'])
+    data = pd.read_csv(filename, delimiter=',',names=['Index','Data','Time','Previous Hash','Nonce','Hash'])
     for i in range(1, len(data)):
         print("Index: ", data["Index"][i])
         print("Data: ", data["Data"][i])
         print("Time: ", data["Time"][i])
         print("Previous Hash: ", data["Previous Hash"][i])
         print("Hash: ", data["Hash"][i])
-        print("Random Padding: ", data["Random Padding"][i])
+        print("Nonce: ", data["Nonce"][i])
         print("\n")
 
 def validateBlock():
     filename = "Blockchain.csv"
-    data = pd.read_csv(filename, delimiter=',',names=['Index','Data','Time','Previous Hash','Random Padding','Hash'])
+    data = pd.read_csv(filename, delimiter=',',names=['Index','Data','Time','Previous Hash','Nonce','Hash'])
     status = False
-    for i in range(2, len(data)-1):
-        prevHash = data["Previous Hash"][i+1]
-        currentHash = hashValue(data['Index'][i], data['Data'][i], data['Time'][i], data['Previous Hash'][i], data['Random Padding'][i])
+    for i in range(3, len(data)):
+        prevHash = data["Previous Hash"][i]
+        currentHash = hashValue(data['Index'][i-1], data['Data'][i-1], data['Time'][i-1], data['Previous Hash'][i-1], data['Nonce'][i-1])
         if (currentHash == prevHash):
             status = True
         else:
             status = False
+            break
 
     if status==True:
         status = "Safe"
@@ -102,7 +118,7 @@ def changeBlcok(newData, index):
 def main():
     exit = False
     while (exit==False):
-        print("\nBlcokchain\n")
+        print("\nBlockchain\n")
         print("1. Create New Blockchain (Previous File Will be Deleted)")
         print("2. Add New Block or Data")
         print("3. View Block")
